@@ -40,6 +40,9 @@ LOGGER: logging.Logger = logging.getLogger(__package__)
 
 CONF_API_TYPE: Final = "api_type"
 CONF_HUB: Final = "hub"
+CONF_TOKEN_METHOD: Final = "token_method"
+TOKEN_METHOD_GENERATE: Final = "generate"
+TOKEN_METHOD_MANUAL: Final = "manual"
 DEFAULT_SERVER: Final = Server.SOMFY_EUROPE
 DEFAULT_HOST: Final = "gateway-xxxx-xxxx-xxxx.local:8443"
 

@@ -20,6 +20,15 @@
           "api_type": "Local API is only supported by TaHoma Connexoon, TaHoma v2, and TaHoma Switch. Climate devices and scenarios are **not** available via the local API."
         }
       },
+      "token_method": {
+        "description": "Choose how you want to configure the local API token.",
+        "data": {
+          "token_method": "Token Method"
+        },
+        "data_description": {
+          "token_method": "Generate automatically (requires cloud credentials) or enter a token manually"
+        }
+      },
       "cloud": {
         "description": "Enter your application credentials.",
         "data": {
@@ -31,7 +40,20 @@
           "password": "The password of your cloud account (app)."
         }
       },
-      "local": {
+      "local_manual": {
+        "description": "Enter your gateway details and API token.",
+        "data": {
+          "host": "[%key:common::config_flow::data::host%]",
+          "token": "API Token",
+          "verify_ssl": "[%key:common::config_flow::data::verify_ssl%]"
+        },
+        "data_description": {
+          "host": "The hostname or IP address of your Overkiz hub.",
+          "token": "The API token for your local gateway.",
+          "verify_ssl": "Verify the SSL certificate. Select this only if you are connecting via the hostname."
+        }
+      },
+      "local_generate": {
         "description": "By activating the [Developer Mode of your TaHoma box](https://github.com/Somfy-Developer/Somfy-TaHoma-Developer-Mode#getting-started), you can authorize third-party software (like Home Assistant) to connect to it via your local network.\n\nAfter activation, enter your application credentials and change the host to include your Gateway PIN or enter the IP address of your gateway.",
         "data": {
           "host": "[%key:common::config_flow::data::host%]",
@@ -53,6 +75,7 @@
       "developer_mode_disabled": "Developer Mode disabled. Activate the Developer Mode of your Somfy TaHoma box first.",
       "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
       "no_such_token": "Cannot create a token for this gateway. Please confirm if the account is linked to this gateway.",
+      "invalid_token": "The provided token is invalid or has been revoked.",
       "server_in_maintenance": "Server is down for maintenance",
       "too_many_attempts": "Too many attempts with an invalid token, temporarily banned",
       "too_many_requests": "Too many requests, try again later",

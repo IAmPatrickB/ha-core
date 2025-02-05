@@ -36,7 +36,16 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
-from .const import CONF_API_TYPE, CONF_HUB, DEFAULT_SERVER, DOMAIN, LOGGER
+from .const import (
+    CONF_API_TYPE,
+    CONF_HUB,
+    CONF_TOKEN_METHOD,
+    DEFAULT_SERVER,
+    DOMAIN,
+    LOGGER,
+    TOKEN_METHOD_GENERATE,
+    TOKEN_METHOD_MANUAL,
+)
 
 
 class DeveloperModeDisabled(HomeAssistantError):
@@ -44,7 +53,12 @@ class DeveloperModeDisabled(HomeAssistantError):
 
 
 class OverkizConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Overkiz (by Somfy)."""
+    """Handle a config flow for Overkiz (by Somfy).
+    
+    For local API access, users can either:
+    1. Generate a token automatically using cloud credentials
+    2. Enter a manually obtained token
+    """
 
     VERSION = 1
 
@@ -114,7 +128,7 @@ class OverkizConfigFlow(ConfigFlow, domain=DOMAIN):
             self._api_type = user_input[CONF_API_TYPE]
 
             if self._api_type == APIType.LOCAL:
-                return await self.async_step_local()
+                return await self.async_step_token_method()
 
             return await self.async_step_cloud()
 
@@ -202,10 +216,91 @@ class OverkizConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_local(
+    async def async_step_token_method(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle the local authentication step via config flow."""
+        """Handle the token method selection step."""
+        if user_input:
+            if user_input[CONF_TOKEN_METHOD] == TOKEN_METHOD_MANUAL:
+                return await self.async_step_local_manual()
+            return await self.async_step_local_generate()
+
+        return self.async_show_form(
+            step_id="token_method",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_TOKEN_METHOD, default=TOKEN_METHOD_GENERATE): vol.In(
+                        {
+                            TOKEN_METHOD_GENERATE: "Generate automatically",
+                            TOKEN_METHOD_MANUAL: "Enter manually",
+                        }
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_local_manual(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle manual token input."""
+        errors = {}
+        description_placeholders = {}
+
+        if user_input:
+            self._host = user_input[CONF_HOST]
+            user_input[CONF_HUB] = self._server
+            user_input[CONF_API_TYPE] = self._api_type
+
+            try:
+                session = async_create_clientsession(
+                    self.hass, verify_ssl=user_input[CONF_VERIFY_SSL]
+                )
+                local_client = OverkizClient(
+                    username="",
+                    password="",
+                    token=user_input[CONF_TOKEN],
+                    session=session,
+                    server=generate_local_server(host=user_input[CONF_HOST]),
+                    verify_ssl=user_input[CONF_VERIFY_SSL],
+                )
+                await local_client.login()
+
+                # Set main gateway id as unique id
+                if gateways := await local_client.get_gateways():
+                    for gateway in gateways:
+                        if is_overkiz_gateway(gateway.id):
+                            await self.async_set_unique_id(
+                                gateway.id, raise_on_progress=False
+                            )
+
+                return self.async_create_entry(title=user_input[CONF_HOST], data=user_input)
+            except (TimeoutError, ClientError) as exception:
+                errors["base"] = "cannot_connect"
+                LOGGER.debug(exception)
+            except BadCredentialsException:
+                errors["base"] = "invalid_token"
+                LOGGER.debug("Invalid or revoked token")
+            except Exception:
+                errors["base"] = "unknown"
+                LOGGER.exception("Unknown error")
+
+        return self.async_show_form(
+            step_id="local_manual",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_HOST, default=self._host): str,
+                    vol.Required(CONF_TOKEN): str,
+                    vol.Required(CONF_VERIFY_SSL, default=True): bool,
+                }
+            ),
+            description_placeholders=description_placeholders,
+            errors=errors,
+        )
+
+    async def async_step_local_generate(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle the local authentication step via config flow with automatic token generation."""
         errors = {}
         description_placeholders = {}
 
@@ -215,6 +310,7 @@ class OverkizConfigFlow(ConfigFlow, domain=DOMAIN):
 
             # inherit the server from previous step
             user_input[CONF_HUB] = self._server
+            user_input[CONF_API_TYPE] = self._api_type
 
             try:
                 user_input = await self.async_validate_input(user_input)
@@ -260,7 +356,7 @@ class OverkizConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
 
         return self.async_show_form(
-            step_id="local",
+            step_id="local_generate",
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_HOST, default=self._host): str,
